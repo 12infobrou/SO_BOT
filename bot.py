@@ -2,12 +2,18 @@ import os
 import json
 import logging
 import asyncio
-import re
+import random
 from telegram import Update
-from telegram.ext import Application, CommandHandler, PollAnswerHandler, ContextTypes
-from groq import Groq
+from telegram.ext import Application, CommandHandler, ContextTypes
 
-# Configuration des logs
+# Essayer d'importer Groq, sinon fallback propre
+try:
+    from groq import Groq
+    HAS_GROQ = True
+except ImportError:
+    HAS_GROQ = False
+
+# CONFIGURATION DES LOGS
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -21,29 +27,82 @@ GROQ_MODEL = "llama-3.3-70b-versatile"
 
 if not TELEGRAM_TOKEN:
     raise ValueError("Le TOKEN de Telegram est manquant dans les variables d'environnement.")
-if not GROQ_API_KEY:
-    raise ValueError("La clé GROQ_API_KEY est manquante dans les variables d'environnement.")
 
-groq_client = Groq(api_key=GROQ_API_KEY)
+groq_client = Groq(api_key=GROQ_API_KEY) if (HAS_GROQ and GROQ_API_KEY) else None
 
-# CONSTANTES DU QUIZ
-QUESTIONS_PAR_QUIZ = 25
+# CONSTANTES ET FICHIERS
 FICHIER_HISTORIQUE = "historique_questions.json"
+FICHIER_LOCAL_QUESTIONS = "questions_locales.json"
 GROUP_SESSIONS = {}
+TAILLES_QUIZ_POSSIBLES = [15, 27, 35, 47, 55]
 
-# GESTION DE L'HISTORIQUE DES QUESTIONS (Anti-répétition persistante)
-def charger_historique() -> list:
-    if os.path.exists(FICHIER_HISTORIQUE):
+# BASE DE DONNÉES INITIALE EXTRAITE DES 40 PHOTOS (Initialisation auto)
+DATABASE_INITIALE = [
+    # --- THÈME : LE COEUR ET LA CIRCULATION ---
+    {"question": "Où naît l'automatisme cardiaque ?", "options": ["Le myocarde ventriculaire", "Le tissu nodal (nœud sinusal)", "Le péricarde", "Le système parasympathique"], "reponse_correcte": 1},
+    {"question": "Quel est l'effet de l'acétylcholine sur le cœur ?", "options": ["Cardio-accélérateur (tachycardie)", "Cardio-modérateur (bradycardie)", "Augmentation de la force systolique", "Infarctus immédiat"], "reponse_correcte": 1},
+    {"question": "La phase de contraction du muscle cardiaque s'appelle :", "options": ["La diastole", "La systole", "La phase réfractaire", "L'arythmie"], "reponse_correcte": 1},
+    {"question": "Les vaisseaux qui nourrissent directement le cœur sont :", "options": ["Les artères carotides", "Les artères coronaires", "Les veines caves", "L'artère aorte"], "reponse_correcte": 1},
+    {"question": "Quel nerf transmet l'effet cardio-modérateur au cœur ?", "options": ["Le nerf sympathique", "Le nerf vague (X)", "Le nerf sciatique", "Le nerf phrénique"], "reponse_correcte": 1},
+    
+    # --- THÈME : LE REIN ET L'EXCRÉTION ---
+    {"question": "Quelle est l'unité fonctionnelle du rein ?", "options": ["Le neurone", "Le néphron", "Le hile rénal", "La vessie"], "reponse_correcte": 1},
+    {"question": "Où se déroule la filtration glomérulaire ?", "options": ["Dans le tube collecteur", "Dans la capsule de Bowman", "Dans l'urètre", "Dans l'anse de Henle"], "reponse_correcte": 1},
+    {"question": "L'hormone ADH (Hormone Anti-Diurétique) a pour rôle de :", "options": ["Augmenter l'excrétion d'eau", "Favoriser la réabsorption de l'eau", "Diminuer la pression artérielle", "Sécréter du glucose"], "reponse_correcte": 1},
+    {"question": "L'urine primitive ne contient normalement jamais de :", "options": ["Urée", "Protéines de gros poids moléculaire", "Eau", "Sels minéraux"], "reponse_correcte": 1},
+    {"question": "Quelle hormone sécrétée par les surrénales augmente la réabsorption du Sodium (Na+) ?", "options": ["L'insuline", "L'aldostérone", "Le cortisol", "L'adrénaline"], "reponse_correcte": 1},
+
+    # --- THÈME : LE SYSTÈME NERVEUX ---
+    {"question": "Comment s'appelle la zone de communication entre deux neurones ?", "options": ["L'axone", "La synapse", "La dendrite", "La gaine de myéline"], "reponse_correcte": 1},
+    {"question": "Quelle substance accélère la vitesse de conduction de l'influx nerveux ?", "options": ["La myéline", "La mélanine", "L'acétylcholine", "Le liquide céphalo-rachidien"], "reponse_correcte": 0},
+    {"question": "Le système nerveux de la vie de relation et des mouvements volontaires est le :", "options": ["Système autonome", "Système cérébro-spinal (somatique)", "Système parasympathique", "Système entérique"], "reponse_correcte": 1},
+    {"question": "Quel ion entre massivement dans le neurone lors de la dépolarisation du potentiel d'action ?", "options": ["Le Potassium (K+)", "Le Sodium (Na+)", "Le Chlore (Cl-)", "Le Calcium (Ca2+)"], "reponse_correcte": 1},
+    {"question": "Le centre nerveux responsable des réflexes involontaires rapides est :", "options": ["Le cerveau", "La moelle épinière", "Le cervelet", "L'hypophyse"], "reponse_correcte": 1},
+
+    # --- THÈME : REPRODUCTION ET HORMONES ---
+    {"question": "Quelle hormone déclenche directement l'ovulation chez la femme ?", "options": ["La FSH", "La LH", "La progestérone", "L'œstrogène"], "reponse_correcte": 1},
+    {"question": "Où se déroule précisément la spermatogenèse ?", "options": ["Dans la prostate", "Dans les tubes séminifères", "Dans le canal déférent", "Dans les vésicules séminales"], "reponse_correcte": 1},
+    {"question": "Quelle hormone maintient le corps jaune au début de la grossesse ?", "options": ["La progestérone", "L'hCG", "La prolactine", "L'oxytocine"], "reponse_correcte": 1},
+    {"question": "Les cellules interstitielles de Leydig sécrètent :", "options": ["Les spermatozoïdes", "La testostérone", "La LH", "L'inhibine"], "reponse_correcte": 1},
+    {"question": "Le lieu normal de la fécondation est :", "options": ["L'utérus", "Le tiers externe de la trompe de Fallope", "L'ovaire", "Le vagin"], "reponse_correcte": 1},
+
+    # --- THÈME : IMMUNOLOGIE ---
+    {"question": "Quelles cellules sont responsables de la sécrétion des anticorps ?", "options": ["Les Lymphocytes T4", "Les Plasmocytes (Lymphocytes B activés)", "Les Macrophages", "Les Éosinophiles"], "reponse_correcte": 1},
+    {"question": "La phagocytose est un mécanisme appartenant à :", "options": ["L'immunité spécifique", "L'immunité innée (non spécifique)", "L'immunité à médiation cellulaire", "La vaccination"], "reponse_correcte": 1},
+    {"question": "Quelles molécules marquent l'identité biologique unique de chaque individu ?", "options": ["Les anticorps", "Les molécules du CMH (SLA)", "Les interleukines", "Les antigènes circulants"], "reponse_correcte": 1},
+    {"question": "Le VIH détruit spécifiquement quelle population cellulaire ?", "options": ["Les Lymphocytes B", "Les Lymphocytes T4 (CD4)", "Les globules rouges", "Les Plaquettes"], "reponse_correcte": 1},
+    {"question": "L'immunité acquise passivement de façon immédiate mais temporaire s'appelle :", "options": ["La vaccination", "La sérothérapie", "La phagocytose", "L'inflammation"], "reponse_correcte": 1},
+
+    # --- THÈME : GÉNÉTIQUE ---
+    {"question": "Une cellule humaine somatique possède combien de chromosomes ?", "options": ["23 chromosomes", "46 chromosomes", "48 chromosomes", "92 chromosomes"], "reponse_correcte": 1},
+    {"question": "Quelle division cellulaire produit les gamètes haploïdes ?", "options": ["La mitose", "La méiose", "La duplication", "La scissiparité"], "reponse_correcte": 1},
+    {"question": "Comment appelle-t-on les différentes versions d'un même gène ?", "options": ["Les phénotypes", "Les allèles", "Les locus", "Les nucléotides"], "reponse_correcte": 1},
+    {"question": "Si deux parents sont de groupe sanguin O, leurs enfants seront :", "options": ["Uniquement de groupe O", "De groupe A ou B", "De groupe AB", "N'importe quel groupe"], "reponse_correcte": 0},
+    {"question": "Le syndrome de Down (Trisomie 21) est dû à :", "options": ["Une mutation génétique ponctuelle", "Une anomalie du nombre de chromosomes", "Une absence de chromosome X", "Une exposition aux UV"], "reponse_correcte": 1}
+]
+
+# INITIALISER LE FICHIER LOCAL SI ABSENT
+def initialiser_base_locale():
+    if not os.path.exists(FICHIER_LOCAL_QUESTIONS):
         try:
-            with open(FICHIER_HISTORIQUE, "r", encoding="utf-8") as f:
+            with open(FICHIER_LOCAL_QUESTIONS, "w", encoding="utf-8") as f:
+                json.dump(DATABASE_INITIALE, f, ensure_ascii=False, indent=4)
+            logger.info("Fichier questions_locales.json créé avec succès.")
+        except Exception as e:
+            logger.error(f"Erreur d'initialisation de la base : {e}")
+
+# CHARGEMENT DES FICHIERS ET HISTORIQUES
+def charger_json(fichier: str) -> list:
+    if os.path.exists(fichier):
+        try:
+            with open(fichier, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            logger.error(f"Erreur lors du chargement de l'historique : {e}")
+            logger.error(f"Erreur de lecture de {fichier} : {e}")
     return []
 
-def sauvegarder_dans_historique(question_text: str):
-    historique = charger_historique()
-    # Nettoyage basique pour comparaison
+def sauvegarder_historique(question_text: str):
+    historique = charger_json(FICHIER_HISTORIQUE)
     clean_text = question_text.strip().lower()
     if clean_text not in historique:
         historique.append(clean_text)
@@ -51,47 +110,38 @@ def sauvegarder_dans_historique(question_text: str):
             with open(FICHIER_HISTORIQUE, "w", encoding="utf-8") as f:
                 json.dump(historique, f, ensure_ascii=False, indent=4)
         except Exception as e:
-            logger.error(f"Erreur lors de la sauvegarde de l'historique : {e}")
+            logger.error(f"Erreur de sauvegarde de l'historique : {e}")
 
-# ADAPTATION DU TEMPS DE RÉPONSE
-def calculer_temps_reponse(question_data: dict) -> int:
-    """ Calcule le temps requis selon le volume de texte et la complexité. """
-    texte_total = question_data["question"] + " ".join(question_data["options"])
-    nombre_mots = len(texte_total.split())
+# ALGORITHME DE SÉLECTION / GÉNÉRATION RECTIFIÉ
+def obtenir_question_locale() -> dict:
+    questions = charger_json(FICHIER_LOCAL_QUESTIONS)
+    if not questions:
+        questions = DATABASE_INITIALE
+    historique = charger_json(FICHIER_HISTORIQUE)
     
-    # Temps de base : 20 secondes
-    temps = 20
-    # On ajoute du temps pour la lecture (approx 1.5s par tranche de 5 mots)
-    temps += int(nombre_mots / 5) * 1.5
-    
-    # Bonus de complexité si des termes médicaux lourds ou calculs sont détectés
-    mots_complexes = ["calculer", "concentration", "posologie", "osmose", "génétique", "dilution", "cycle"]
-    if any(mot in texte_total.lower() for mot in mots_complexes):
-        temps += 10
-        
-    # Limites de sécurité (entre 20 et 50 secondes maximum pour un sondage Telegram)
-    return min(max(int(temps), 20), 50)
+    disponibles = [q for q in questions if q["question"].strip().lower() not in historique]
+    if not disponibles:
+        return random.choice(questions)
+    return random.choice(disponibles)
 
-
-# GÉNÉRATION DE QUESTION VIA GROQ (IA)
-async def generer_question_infas_ia() -> dict:
-    """Appelle Groq en lui injectant l'historique pour exclure les doublons."""
-    historique = charger_historique()
+async def obtenir_question_groq() -> dict:
+    if not groq_client:
+        return None
     
-    # On ne passe que les 30 dernières questions pour ne pas saturer le contexte du prompt
-    historique_recent = historique[-30:] if len(historique) > 30 else historique
-    exclusions = "\n".join([f"- {q}" for q in historique_recent])
+    historique = charger_json(FICHIER_HISTORIQUE)[-30:]
+    exclusions = "\n".join([f"- {q}" for q in historique])
 
     system_prompt = (
-        "Tu es un concepteur officiel du concours d'entrée à l'INFAS en Côte d'Ivoire.\n"
-        "Génère une question de QCM réaliste, rigoureuse et du niveau exact des épreuves des années 2010 à 2025.\n"
-        "Domaines cibles : Anatomie-Physiologie (SVT), Santé Publique, Culture Générale Médicale, Secourisme ou Initiation à la Pharmacologie.\n\n"
-        "Tu dois impérativement répondre sous la forme d'un objet JSON contenant exactement ces clés :\n"
-        "- 'question': Le texte de la question.\n"
-        "- 'options': Un tableau de strictement 4 propositions de réponses.\n"
-        "- 'reponse_correcte': Un entier (0, 1, 2 ou 3) représentant l'index de la bonne réponse.\n\n"
-        f"CRITÈRE ABSOLU : Ne génère PAS une question ressemblant à celles-ci :\n{exclusions}\n"
-        "Renvoie uniquement l'objet JSON pur, sans aucun texte avant ou après."
+        "Tu es un concepteur expert du concours d'entrée INFAS (CI).\n"
+        "Génère un QCM à choix unique de niveau professionnel sur l'un de ces thèmes : "
+        "Anatomie, Cardiovasculaire, Système rénal, Neurologie, Reproduction humaine, Immunologie ou Pharmacologie.\n\n"
+        "Format de réponse JSON strict exigé :\n"
+        "{\n"
+        "  \"question\": \"Intitulé de la question\",\n"
+        "  \"options\": [\"Option 0\", \"Option 1\", \"Option 2\", \"Option 3\"],\n"
+        "  \"reponse_correcte\": 0\n"
+        "}\n"
+        f"INTERDICTION de générer ces questions existantes :\n{exclusions}"
     )
 
     try:
@@ -99,143 +149,154 @@ async def generer_question_infas_ia() -> dict:
             model=GROQ_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "Génère une question de niveau concours INFAS d'Afrique de l'Ouest."}
+                {"role": "user", "content": "Génère un QCM médical INFAS."}
             ],
             response_format={"type": "json_object"},
-            temperature=0.85 # Température légèrement augmentée pour maximiser la variété
+            temperature=0.8
         )
-        
-        quiz_data = json.loads(completion.choices[0].message.content.strip())
-        return quiz_data
+        return json.loads(completion.choices[0].message.content.strip())
     except Exception as e:
-        logger.error(f"Erreur de génération Groq : {e}")
+        logger.error(f"Échec Groq : {e}")
         return None
 
+# CALCUL DYNAMIQUE DU TEMPS
+def calculer_temps(question_data: dict) -> int:
+    texte = question_data["question"] + " ".join(question_data["options"])
+    temps = 20 + int(len(texte.split()) / 5) * 2
+    return min(max(temps, 20), 45)
 
-# FONCTION PRINCIPALE : ENVOI DE LA QUESTION ET SÉQUENCE
+# CORE ORCHESTRATEUR DE LA SESSION
 async def orchestrer_quiz(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
     if chat_id not in GROUP_SESSIONS:
         return
 
     session = GROUP_SESSIONS[chat_id]
     
-    if session["status"] != "running":
+    # Contrôle de l'état pause
+    while chat_id in GROUP_SESSIONS and GROUP_SESSIONS[chat_id]["status"] == "paused":
+        await asyncio.sleep(1)
+
+    if chat_id not in GROUP_SESSIONS or session["status"] != "running":
         return
 
     session["current_index"] += 1
+    total = session["total_questions"]
 
-    # Fin du quiz à 25 questions
-    if session["current_index"] > QUESTIONS_PAR_QUIZ:
+    if session["current_index"] > total:
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"🏁 *Fin du Quiz spécial Annales INFAS !*\nFélicitations aux participants. Tapez `/infas` pour démarrer une nouvelle session de {QUESTIONS_PAR_QUIZ} questions uniques."
+            text=f"🏁 *Session de révision terminée !*\n\n🎯 Nombre total de questions traitées : `{total}`.\nUtilisez `/infas` pour relancer une série aléatoire."
         )
         GROUP_SESSIONS.pop(chat_id, None)
         return
 
-    # Message d'attente pendant la génération Groq
-    msg_attente = await context.bot.send_message(
-        chat_id=chat_id,
-        text=f"🔄 _Groq génère une question inédite (Question {session['current_index']}/{QUESTIONS_PAR_QUIZ})..._"
-    )
+    # Alternance aléatoire de la source (Mix IA et Local)
+    source = random.choice(["groq", "local"])
+    quiz_data = None
 
-    quiz_data = await generer_question_infas_ia()
-    
-    try:
-        await context.bot.delete_message(chat_id=chat_id, message_id=msg_attente.message_id)
-    except Exception:
-        pass
+    if source == "groq" and groq_client:
+        msg = await context.bot.send_message(chat_id=chat_id, text=f"🔄 _Génération de la question {session['current_index']}/{total} par Groq..._")
+        quiz_data = await obtenir_question_groq()
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=msg.message_id)
+        except Exception:
+            pass
 
-    if not quiz_data or "question" not in quiz_data:
-        await context.bot.send_message(chat_id=chat_id, text="⚠️ Erreur de communication avec Groq. Nouvelle tentative...")
-        session["current_index"] -= 1
-        await asyncio.sleep(3)
-        asyncio.create_task(orchestrer_quiz(context, chat_id))
-        return
+    if not quiz_data:  # Fallback automatique sur la base locale si choix local ou si Groq a échoué
+        quiz_data = obtenir_question_locale()
 
-    # Sauvegarde immédiate dans l'historique global pour éviter les doublons futurs
-    sauvegarder_dans_historique(quiz_data["question"])
-
-    # Calcul dynamique de la durée de la question
-    duree_sondage = calculer_temps_reponse(quiz_data)
+    sauvegarder_historique(quiz_data["question"])
+    temps_reflexion = calculer_temps(quiz_data)
 
     try:
         await context.bot.send_poll(
             chat_id=chat_id,
-            question=f"❓ [INFAS {session['current_index']}/{QUESTIONS_PAR_QUIZ}] {quiz_data['question']}"[:300],
+            question=f"❓ [INFAS {session['current_index']}/{total}] {quiz_data['question']}"[:300],
             options=[opt[:100] for opt in quiz_data["options"]],
             correct_option_id=int(quiz_data["reponse_correcte"]),
             type="quiz",
             is_anonymous=False,
-            open_period=duree_sondage
+            open_period=temps_reflexion
         )
     except Exception as e:
-        logger.error(f"Erreur d'envoi du sondage Telegram : {e}")
+        logger.error(f"Erreur d'envoi du sondage : {e}")
         asyncio.create_task(orchestrer_quiz(context, chat_id))
         return
 
-    # Attente dynamique et réactive seconde par seconde
-    for _ in range(duree_sondage + 3):
+    # Attente asynchrone non bloquante de la fin du timer
+    for _ in range(temps_reflexion + 3):
         await asyncio.sleep(1)
-        if chat_id not in GROUP_SESSIONS or GROUP_SESSIONS[chat_id]["status"] != "running":
+        if chat_id not in GROUP_SESSIONS:
             return
 
-    # Séquence suivante
     asyncio.create_task(orchestrer_quiz(context, chat_id))
 
-
-# COMMANDES DU BOT
+# DÉFINITION DES COMMANDES TELEGRAM
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_text = (
-        "👋 *Bienvenue sur le Bot de révision INFAS automatique !*\n\n"
-        "Ce bot utilise l'IA Groq pour extraire et modéliser des questions basées sur les *anciens sujets du concours INFAS (2010 à 2025)*.\n\n"
-        "💡 *Règles du jeu :*\n"
-        f"• Chaque quiz comporte exactement `{QUESTIONS_PAR_QUIZ} questions`.\n"
-        "• Le temps de réponse s'ajuste automatiquement selon la longueur de la question.\n"
-        "• Une question posée ne réapparaît *jamais*, d'une session à l'autre.\n\n"
-        "➡️ Tapez `/infas` dans votre groupe ou en privé pour lancer un quiz."
+    text = (
+        "🧠 *Bienvenue sur le Bot Super-Annales INFAS !*\n\n"
+        "Prêt pour le grand jour ? Ce bot est configuré pour tester tes connaissances de façon intensive.\n\n"
+        "🛠 *Commandes de contrôle :*\n"
+        "• `/infas` : Lance une session (Taille aléatoire de 15, 27, 35, 47 ou 55 questions)\n"
+        "• `/pause` : Suspend momentanément le flux du quiz\n"
+        "• `/resume` ou `/reprendre` : Reprend immédiatement là où vous en étiez\n"
+        "• `/stop` : Arrête définitivement la session en cours"
     )
-    await update.message.reply_text(welcome_text, parse_mode="Markdown")
+    await update.message.reply_text(text, parse_mode="Markdown")
 
 async def cmd_infas(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    
     if chat_id in GROUP_SESSIONS:
-        await update.message.reply_text("⚠️ Un quiz est déjà en cours dans ce tchat. Attendez qu'il se termine ou tapez `/stop_infas`.")
+        await update.message.reply_text("⚠️ Une session est déjà en cours dans ce groupe. Utilisez `/stop` avant d'en ouvrir une autre.")
         return
 
-    # Initialisation de la session
+    taille_session = random.choice(TAILLES_QUIZ_POSSIBLES)
     GROUP_SESSIONS[chat_id] = {
         "status": "running",
-        "current_index": 0
+        "current_index": 0,
+        "total_questions": taille_session
     }
 
-    await update.message.reply_text(
-        f"🚀 *Démarrage d'un Quiz de {QUESTIONS_PAR_QUIZ} questions (Annales INFAS 2010-2025).*\n"
-        "Soyez prêts, la première question arrive..."
-    )
-    
+    await update.message.reply_text(f"🚀 *Session active initialisée !* Nombre de questions retenu pour ce round : `{taille_session}`. Concentration maximum !")
     asyncio.create_task(orchestrer_quiz(context, chat_id))
 
-async def cmd_stop_infas(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def cmd_pause(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if chat_id in GROUP_SESSIONS:
+        GROUP_SESSIONS[chat_id]["status"] = "paused"
+        await update.message.reply_text("⏸ *Quiz mis en pause.* Envoyez `/resume` pour continuer la révision.")
+    else:
+        await update.message.reply_text("Aucun exercice n'est en cours.")
+
+async def cmd_resume(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if chat_id in GROUP_SESSIONS and GROUP_SESSIONS[chat_id]["status"] == "paused":
+        GROUP_SESSIONS[chat_id]["status"] = "running"
+        await update.message.reply_text("▶️ *Reprise immédiate de l'épreuve !* Préparation de la question...")
+    else:
+        await update.message.reply_text("Le quiz n'est pas suspendu.")
+
+async def cmd_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if chat_id in GROUP_SESSIONS:
         GROUP_SESSIONS.pop(chat_id, None)
-        await update.message.reply_text("🛑 *Le quiz a été arrêté.* Toutes les questions sauvegardées jusqu'ici ne reviendront plus.")
+        await update.message.reply_text("🛑 *Session coupée définitivement par l'administrateur.*")
     else:
-        await update.message.reply_text("Aucun quiz n'est actif actuellement.")
+        await update.message.reply_text("Aucun quiz actif à stopper.")
 
-
-# MAIN EXECUTION
+# CODE DE LANCEMENT DE L'APPLICATION
 def main():
+    initialiser_base_locale()
     application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    # Handlers de commandes
     application.add_handler(CommandHandler("start", cmd_start))
     application.add_handler(CommandHandler("infas", cmd_infas))
-    application.add_handler(CommandHandler("stop_infas", cmd_stop_infas))
+    application.add_handler(CommandHandler("pause", cmd_pause))
+    application.add_handler(CommandHandler("resume", cmd_resume))
+    application.add_handler(CommandHandler("reprendre", cmd_resume))
+    application.add_handler(CommandHandler("stop", cmd_stop))
 
-    logger.info("Bot Annales INFAS démarré et prêt.")
+    logger.info("Bot Démarré et base de données prête.")
     application.run_polling()
 
 if __name__ == "__main__":
