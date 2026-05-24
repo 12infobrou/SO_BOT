@@ -4,7 +4,7 @@ import logging
 import asyncio
 import random
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, PollAnswerHandler, ContextTypes
 
 # Essayer d'importer Groq, sinon fallback propre
 try:
@@ -34,9 +34,10 @@ groq_client = Groq(api_key=GROQ_API_KEY) if (HAS_GROQ and GROQ_API_KEY) else Non
 FICHIER_HISTORIQUE = "historique_questions.json"
 FICHIER_LOCAL_QUESTIONS = "questions_locales.json"
 GROUP_SESSIONS = {}
+POLL_TO_CHAT = {}  # Permet de lier l'ID d'un sondage à son groupe et sa bonne réponse
 TAILLES_QUIZ_POSSIBLES = [15, 27, 35, 47, 55]
 
-# BASE DE DONNÉES INITIALE EXTRAITE DES 40 PHOTOS (Initialisation auto)
+# BASE DE DONNÉES INITIALE EXTRAITE DES PHOTOS
 DATABASE_INITIALE = [
     # --- THÈME : LE COEUR ET LA CIRCULATION ---
     {"question": "Où naît l'automatisme cardiaque ?", "options": ["Le myocarde ventriculaire", "Le tissu nodal (nœud sinusal)", "Le péricarde", "Le système parasympathique"], "reponse_correcte": 1},
@@ -76,22 +77,20 @@ DATABASE_INITIALE = [
     # --- THÈME : GÉNÉTIQUE ---
     {"question": "Une cellule humaine somatique possède combien de chromosomes ?", "options": ["23 chromosomes", "46 chromosomes", "48 chromosomes", "92 chromosomes"], "reponse_correcte": 1},
     {"question": "Quelle division cellulaire produit les gamètes haploïdes ?", "options": ["La mitose", "La méiose", "La duplication", "La scissiparité"], "reponse_correcte": 1},
-    {"question": "Comment appelle-t-on les différentes versions d'un même gène ?", "options": ["Les phénotypes", "Les allèles", "Les locus", "Les nucléotides"], "reponse_correcte": 1},
+    {"question": "Comment appelle-t-on les différentes versions d'un même gène ?", "options": ["Le phénotypes", "Les allèles", "Les locus", "Les nucléotides"], "reponse_correcte": 1},
     {"question": "Si deux parents sont de groupe sanguin O, leurs enfants seront :", "options": ["Uniquement de groupe O", "De groupe A ou B", "De groupe AB", "N'importe quel groupe"], "reponse_correcte": 0},
     {"question": "Le syndrome de Down (Trisomie 21) est dû à :", "options": ["Une mutation génétique ponctuelle", "Une anomalie du nombre de chromosomes", "Une absence de chromosome X", "Une exposition aux UV"], "reponse_correcte": 1}
 ]
 
-# INITIALISER LE FICHIER LOCAL SI ABSENT
 def initialiser_base_locale():
     if not os.path.exists(FICHIER_LOCAL_QUESTIONS):
         try:
             with open(FICHIER_LOCAL_QUESTIONS, "w", encoding="utf-8") as f:
                 json.dump(DATABASE_INITIALE, f, ensure_ascii=False, indent=4)
-            logger.info("Fichier questions_locales.json créé avec succès.")
+            logger.info("Fichier questions_locales.json initialisé.")
         except Exception as e:
             logger.error(f"Erreur d'initialisation de la base : {e}")
 
-# CHARGEMENT DES FICHIERS ET HISTORIQUES
 def charger_json(fichier: str) -> list:
     if os.path.exists(fichier):
         try:
@@ -112,13 +111,11 @@ def sauvegarder_historique(question_text: str):
         except Exception as e:
             logger.error(f"Erreur de sauvegarde de l'historique : {e}")
 
-# ALGORITHME DE SÉLECTION / GÉNÉRATION RECTIFIÉ
 def obtenir_question_locale() -> dict:
     questions = charger_json(FICHIER_LOCAL_QUESTIONS)
     if not questions:
         questions = DATABASE_INITIALE
     historique = charger_json(FICHIER_HISTORIQUE)
-    
     disponibles = [q for q in questions if q["question"].strip().lower() not in historique]
     if not disponibles:
         return random.choice(questions)
@@ -127,7 +124,6 @@ def obtenir_question_locale() -> dict:
 async def obtenir_question_groq() -> dict:
     if not groq_client:
         return None
-    
     historique = charger_json(FICHIER_HISTORIQUE)[-30:]
     exclusions = "\n".join([f"- {q}" for q in historique])
 
@@ -159,20 +155,44 @@ async def obtenir_question_groq() -> dict:
         logger.error(f"Échec Groq : {e}")
         return None
 
-# CALCUL DYNAMIQUE DU TEMPS
 def calculer_temps(question_data: dict) -> int:
     texte = question_data["question"] + " ".join(question_data["options"])
     temps = 20 + int(len(texte.split()) / 5) * 2
     return min(max(temps, 20), 45)
 
-# CORE ORCHESTRATEUR DE LA SESSION
+# CAPTURE DES RÉPONSES ET GESTION DES POINTS
+async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    answer = update.poll_answer
+    poll_id = answer.poll_id
+
+    if poll_id not in POLL_TO_CHAT:
+        return
+
+    chat_id = POLL_TO_CHAT[poll_id]["chat_id"]
+    correct_option = POLL_TO_CHAT[poll_id]["correct_option"]
+
+    if chat_id not in GROUP_SESSIONS:
+        return
+
+    # Si l'utilisateur a choisi la bonne option
+    if answer.option_ids and answer.option_ids[0] == correct_option:
+        user = answer.user
+        user_id = user.id
+        user_name = user.full_name
+
+        session = GROUP_SESSIONS[chat_id]
+        if user_id not in session["scores"]:
+            session["scores"][user_id] = {"name": user_name, "points": 0}
+        
+        session["scores"][user_id]["points"] += 1
+
+# ORCHESTRATEUR DE LA SESSION
 async def orchestrer_quiz(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
     if chat_id not in GROUP_SESSIONS:
         return
 
     session = GROUP_SESSIONS[chat_id]
     
-    # Contrôle de l'état pause
     while chat_id in GROUP_SESSIONS and GROUP_SESSIONS[chat_id]["status"] == "paused":
         await asyncio.sleep(1)
 
@@ -182,15 +202,27 @@ async def orchestrer_quiz(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
     session["current_index"] += 1
     total = session["total_questions"]
 
+    # FIN DU QUIZ : Génération et affichage du classement final
     if session["current_index"] > total:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=f"🏁 *Session de révision terminée !*\n\n🎯 Nombre total de questions traitées : `{total}`.\nUtilisez `/infas` pour relancer une série aléatoire."
-        )
+        scores = session.get("scores", {})
+        sorted_scores = sorted(scores.values(), key=lambda x: x["points"], reverse=True)
+
+        txt_classement = "🏆 *CLASSEMENT FINAL DU CONCOURS BLANC* 🏆\n\n"
+        if not sorted_scores:
+            txt_classement += "😢 *Aucun participant n'a marqué de points durant cette session.* Relisez vos leçons !"
+        else:
+            for i, score_data in enumerate(sorted_scores, start=1):
+                medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "🏅"
+                txt_classement += f"{medal} *{i}. {score_data['name']}* : {score_data['points']} pt(s) / {total}\n"
+        
+        await context.bot.send_message(chat_id=chat_id, text=txt_classement, parse_mode="Markdown")
+        
+        # Nettoyage de la mémoire pour cette session
+        for p_id in session.get("poll_ids", []):
+            POLL_TO_CHAT.pop(p_id, None)
         GROUP_SESSIONS.pop(chat_id, None)
         return
 
-    # Alternance aléatoire de la source (Mix IA et Local)
     source = random.choice(["groq", "local"])
     quiz_data = None
 
@@ -202,28 +234,38 @@ async def orchestrer_quiz(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
         except Exception:
             pass
 
-    if not quiz_data:  # Fallback automatique sur la base locale si choix local ou si Groq a échoué
+    if not quiz_data:
         quiz_data = obtenir_question_locale()
 
     sauvegarder_historique(quiz_data["question"])
     temps_reflexion = calculer_temps(quiz_data)
+    correct_id = int(quiz_data["reponse_correcte"])
 
     try:
-        await context.bot.send_poll(
+        message = await context.bot.send_poll(
             chat_id=chat_id,
             question=f"❓ [INFAS {session['current_index']}/{total}] {quiz_data['question']}"[:300],
             options=[opt[:100] for opt in quiz_data["options"]],
-            correct_option_id=int(quiz_data["reponse_correcte"]),
+            correct_option_id=correct_id,
             type="quiz",
             is_anonymous=False,
             open_period=temps_reflexion
         )
+        
+        # Enregistrement du sondage actif pour le suivi des points
+        poll_id = message.poll.id
+        POLL_TO_CHAT[poll_id] = {
+            "chat_id": chat_id,
+            "correct_option": correct_id
+        }
+        session["poll_ids"].append(poll_id)
+
     except Exception as e:
         logger.error(f"Erreur d'envoi du sondage : {e}")
         asyncio.create_task(orchestrer_quiz(context, chat_id))
         return
 
-    # Attente asynchrone non bloquante de la fin du timer
+    # Attente de la fin du timer
     for _ in range(temps_reflexion + 3):
         await asyncio.sleep(1)
         if chat_id not in GROUP_SESSIONS:
@@ -231,40 +273,42 @@ async def orchestrer_quiz(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
 
     asyncio.create_task(orchestrer_quiz(context, chat_id))
 
-# DÉFINITION DES COMMANDES TELEGRAM
+# COMMANDES TELEGRAM
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "🧠 *Bienvenue sur le Bot Super-Annales INFAS !*\n\n"
-        "Prêt pour le grand jour ? Ce bot est configuré pour tester tes connaissances de façon intensive.\n\n"
+        "Prêt pour le grand jour ? Ce bot teste vos connaissances en groupe et affiche un classement à la fin.\n\n"
         "🛠 *Commandes de contrôle :*\n"
         "• `/infas` : Lance une session (Taille aléatoire de 15, 27, 35, 47 ou 55 questions)\n"
-        "• `/pause` : Suspend momentanément le flux du quiz\n"
-        "• `/resume` ou `/reprendre` : Reprend immédiatement là où vous en étiez\n"
-        "• `/stop` : Arrête définitivement la session en cours"
+        "• `/pause` : Suspend le flux du quiz\n"
+        "• `/resume` ou `/reprendre` : Reprend le cours du jeu\n"
+        "• `/stop` : Arrête définitivement le quiz"
     )
     await update.message.reply_text(text, parse_mode="Markdown")
 
 async def cmd_infas(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if chat_id in GROUP_SESSIONS:
-        await update.message.reply_text("⚠️ Une session est déjà en cours dans ce groupe. Utilisez `/stop` avant d'en ouvrir une autre.")
+        await update.message.reply_text("⚠️ Un quiz est déjà en cours ici. Terminez-le ou tapez `/stop`.")
         return
 
     taille_session = random.choice(TAILLES_QUIZ_POSSIBLES)
     GROUP_SESSIONS[chat_id] = {
         "status": "running",
         "current_index": 0,
-        "total_questions": taille_session
+        "total_questions": taille_session,
+        "scores": {},       # Contiendra les scores : {user_id: {"name": ..., "points": ...}}
+        "poll_ids": []      # Liste pour nettoyer POLL_TO_CHAT après le quiz
     }
 
-    await update.message.reply_text(f"🚀 *Session active initialisée !* Nombre de questions retenu pour ce round : `{taille_session}`. Concentration maximum !")
+    await update.message.reply_text(f"🚀 *Début de l'épreuve !* Ce round contient `{taille_session}` questions. Que le meilleur gagne !")
     asyncio.create_task(orchestrer_quiz(context, chat_id))
 
 async def cmd_pause(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if chat_id in GROUP_SESSIONS:
         GROUP_SESSIONS[chat_id]["status"] = "paused"
-        await update.message.reply_text("⏸ *Quiz mis en pause.* Envoyez `/resume` pour continuer la révision.")
+        await update.message.reply_text("⏸ *Quiz mis en pause.* Envoyez `/resume` pour continuer.")
     else:
         await update.message.reply_text("Aucun exercice n'est en cours.")
 
@@ -272,19 +316,21 @@ async def cmd_resume(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if chat_id in GROUP_SESSIONS and GROUP_SESSIONS[chat_id]["status"] == "paused":
         GROUP_SESSIONS[chat_id]["status"] = "running"
-        await update.message.reply_text("▶️ *Reprise immédiate de l'épreuve !* Préparation de la question...")
+        await update.message.reply_text("▶️ *Reprise du concours !* Préparation de la question...")
     else:
         await update.message.reply_text("Le quiz n'est pas suspendu.")
 
 async def cmd_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if chat_id in GROUP_SESSIONS:
+        session = GROUP_SESSIONS[chat_id]
+        for p_id in session.get("poll_ids", []):
+            POLL_TO_CHAT.pop(p_id, None)
         GROUP_SESSIONS.pop(chat_id, None)
-        await update.message.reply_text("🛑 *Session coupée définitivement par l'administrateur.*")
+        await update.message.reply_text("🛑 *Session coupée définitivement.* Aucun classement ne sera publié.")
     else:
         await update.message.reply_text("Aucun quiz actif à stopper.")
 
-# CODE DE LANCEMENT DE L'APPLICATION
 def main():
     initialiser_base_locale()
     application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -295,8 +341,11 @@ def main():
     application.add_handler(CommandHandler("resume", cmd_resume))
     application.add_handler(CommandHandler("reprendre", cmd_resume))
     application.add_handler(CommandHandler("stop", cmd_stop))
+    
+    # Handler crucial pour écouter et compter les bonnes réponses en direct
+    application.add_handler(PollAnswerHandler(handle_poll_answer))
 
-    logger.info("Bot Démarré et base de données prête.")
+    logger.info("Bot Démarré avec système de classement actif.")
     application.run_polling()
 
 if __name__ == "__main__":
