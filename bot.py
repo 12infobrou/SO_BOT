@@ -183,7 +183,7 @@ async def obtenir_question_groq(exclusions_liste: list) -> dict:
 def calculer_temps(question_data: dict) -> int:
     texte = question_data["question"] + " ".join(question_data["options"])
     temps = 20 + int(len(texte.split()) / 5) * 2
-    return min(max(temps, 20), 45)
+    return min(max(temps, 20), 30)
 
 async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     answer = update.poll_answer
