@@ -1,9 +1,10 @@
 import os
-import random
-import time
+import json
+import logging
 import asyncio
-from telebot.async_telebot import AsyncTeleBot
-from telebot import types
+import random
+from telegram import Update
+from telegram.ext import Application
 
 # Initialisation du Bot avec ton Token Railway / Environnement
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "TON_TOKEN_ICI")
