@@ -81,7 +81,7 @@ DATABASE_INITIALE = [
     {"question": "Si deux parents sont de groupe sanguin O, leurs enfants seront :", "options": ["Uniquement de groupe O", "De groupe A ou B", "De groupe AB", "N'importe quel groupe"], "reponse_correcte": 0},
     {"question": "Le syndrome de Down (Trisomie 21) est dû à :", "options": ["Une mutation génétique ponctuelle", "Une anomalie du nombre de chromosomes", "Une absence de chromosome X", "Une exposition aux UV"], "reponse_correcte": 1},
 
-    # --- THÈME : FRANÇAIS & LITTÉRATURE (AJOUTÉ) ---
+    # --- THÈME : FRANÇAIS & LITTÉRATURE ---
     {"question": "Quel est le thème du sujet de dissertation : « La satisfaction de l'exercice d'un métier réside dans la récompense personnelle que dans la plénitude offerte avec bénéfices » ?", "options": ["La récompense personnelle", "La satisfaction de l'exercice d'un métier", "L'exercice d'un métier", "Le métier"], "reponse_correcte": 1},
     {"question": "À quel type de plan répond le sujet axé sur la satisfaction de l'exercice d'un métier ?", "options": ["Analytique", "Comparatif", "Dialectique", "Thématique"], "reponse_correcte": 2},
     {"question": "Vrai ou Faux : La problématique de ce sujet est l'objectif de l'exercice d'un métier.", "options": ["Vrai", "Faux"], "reponse_correcte": 0},
@@ -122,7 +122,7 @@ DATABASE_INITIALE = [
     {"question": "La figure de style consistant à atténuer l'expression en disant moins pour faire entendre plus s'appelle :", "options": ["L'hyperbole", "La litote", "L'anaphore", "L'ellipse"], "reponse_correcte": 1},
     {"question": "« Mère décédée; enterrement demain. Sentiments distingués ». Ce style télégraphique utilise :", "options": ["Une anaphore", "Une ellipse", "Une gradation", "Une allitération"], "reponse_correcte": 1},
 
-    # --- THÈME : BIOLOGIE (AJOUTÉ) ---
+    # --- THÈME : BIOLOGIE ---
     {"question": "La phase de dépolarisation lors d'un potentiel d'action s’explique par :", "options": ["L’entrée massive des ions Na+ dans le milieu intracellulaire", "L’entrée des ions K+ dans le milieu intracellulaire", "La sortie de Na+ vers le milieu extracellulaire", "La sortie de K+ vers le milieu extracellulaire"], "reponse_correcte": 0},
     {"question": "Au niveau de la fente synaptique, la transmission du message nerveux est toujours :", "options": ["Unidirectionnelle", "Bidirectionnelle", "Aléatoire", "Ininterrompue"], "reponse_correcte": 0},
     {"question": "Vrai ou Faux : Un neuromédiateur donné possède la propriété d'agir sur l'intégralité des neurones.", "options": ["Vrai", "Faux"], "reponse_correcte": 1},
@@ -130,7 +130,7 @@ DATABASE_INITIALE = [
     {"question": "La libération des vésicules de neurotransmetteurs dans l’espace synaptique s'effectue par :", "options": ["Phagocytose", "Endocytose", "Exocytose", "Pinocytose"], "reponse_correcte": 2},
     {"question": "Comment appelle-t-on la différence de potentiel stable entre les deux faces de la membrane plasmique d'une fibre nerveuse non excitée ?", "options": ["Potentiel d’action", "Potentiel de repos", "PPSE", "PPSI"], "reponse_correcte": 1},
     {"question": "La valeur standard du potentiel transmembranaire de repos d'une fibre nerveuse est d'environ :", "options": ["+70 mV", "-30 mV", "-70 mV", "+30 mV"], "reponse_correcte": 2},
-    {"question": "Le transport d’ions opéré en permanence par la pompe Na+/K+ contre le gradient de concentration est un :", "options": ["Transport passif", "Transport actif (consommant de l'ATP)"], "reponse_correcte": 1},
+    {"question": "Le transport d’ions opéré en permanence par la pompe Na+/K+ contre le gradient de concentration is un :", "options": ["Transport passif", "Transport actif (consommant de l'ATP)"], "reponse_correcte": 1},
     {"question": "L'arrivée de l'onde de dépolarisation (PA) au niveau du bouton synaptique provoque instantanément :", "options": ["Une sortie massive de Ca2+ de la cellule", "Une entrée sélective de Ca2+ dans la cellule"], "reponse_correcte": 1},
     {"question": "Au niveau des synapses motrices excitatrices, le neurotransmetteur majeur libéré est :", "options": ["L'adrénaline", "L'acétylcholine", "La dopamine", "Le GABA"], "reponse_correcte": 1},
     {"question": "Vrai ou Faux : La digestion se résume strictement au passage direct et complet des aliments intacts dans le flux sanguin.", "options": ["Vrai", "Faux"], "reponse_correcte": 1},
@@ -145,10 +145,10 @@ DATABASE_INITIALE = [
     {"question": "Quel est l’ordre séquentiel exact et chronologique des 4 phases de la phagocytose ?", "options": ["Absorption -> Digestion -> Adhésion -> Rejet", "Digestion -> Absorption -> Adhésion -> Rejet", "Adhésion -> Absorption -> Digestion -> Rejet"], "reponse_correcte": 2},
     {"question": "Le Virus de l'Immunodéficience Humaine (VIH) paralyse le système immunitaire en infectant sélectivement :", "options": ["Les lymphocytes T4 (LT4)", "Les lymphocytes B", "Les macrophages alvéolaires", "Les hématies"], "reponse_correcte": 0},
 
-    # --- THÈME : HISTOIRE-GÉOGRAPHIE & EDHC (AJOUTÉ) ---
+    # --- THÈME : HISTOIRE-GÉOGRAPHIE & EDHC ---
     {"question": "La période politique active de la décolonisation de la Côte d’Ivoire s'étend historiquement :", "options": ["Du lendemain de la 2e Guerre Mondiale jusqu’au 07 Août 1960", "Du lendemain de la guerre jusqu'à la loi-cadre uniquement", "De 1944 à 1947"], "reponse_correcte": 0},
     {"question": "Quelles structures forment les entités administratives déconcentrées de l'État en Côte d'Ivoire ?", "options": ["Le District, la Région, le Département, la Sous-Préfecture, le Village", "La Mairie et le Conseil de District", "Les ministères centraux uniquement"], "reponse_correcte": 0},
-    {"question": "En Côte d'Ivoire, les collectivités territoriales décentralisées majeures prévues par la loi sont :", "options": ["Les Régions et les Communes", "Les Sous-préfectures", "Les chefferies traditionnelles de villages"], "reponse_correcte": 0},
+    {"question": "En Côte d'Ivoire, les collectivités territoriales décentralisées majeures prévues par la loi sont :", "options": ["Les Régions et les Communes", "Les Sous-prefectures", "Les chefferies traditionnelles de villages"], "reponse_correcte": 0},
     {"question": "L’impôt citoyen est une contribution financière obligatoire versée à :", "options": ["L’État", "Au contribuable local", "Aux groupements de sociétés privées"], "reponse_correcte": 0},
     {"question": "Quels sont les trois grands pouvoirs constitutionnels régissant la République de Côte d’Ivoire ?", "options": ["Le pouvoir exécutif, le pouvoir législatif et le pouvoir judiciaire", "La primature, le sénat et l'assemblée nationale", "Le ministère de l'intérieur, de la défense et de la justice"], "reponse_correcte": 0}
 ]
@@ -182,21 +182,37 @@ def sauvegarder_historique(question_text: str):
         except Exception as e:
             logger.error(f"Erreur de sauvegarde de l'historique : {e}")
 
-def obtenir_question_locale() -> dict:
+def obtenir_question_locale(exclusions_liste: list) -> dict:
     questions = charger_json(FICHIER_LOCAL_QUESTIONS)
     if not questions:
         questions = DATABASE_INITIALE
-    historique = charger_json(FICHIER_HISTORIQUE)
-    disponibles = [q for q in questions if q["question"].strip().lower() not in historique]
+        
+    disponibles = [q for q in questions if q["question"].strip().lower() not in exclusions_liste]
+    
+    # Si toutes les questions locales ont été posées vis-à-vis de l'historique global
     if not disponibles:
-        return random.choice(questions)
+        logger.info("Toutes les questions locales ont été épuisées. Réinitialisation de l'historique global.")
+        try:
+            with open(FICHIER_HISTORIQUE, "w", encoding="utf-8") as f:
+                json.dump([], f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            logger.error(f"Erreur lors de la vidange de l'historique : {e}")
+            
+        # Recalculer les questions disponibles en filtrant uniquement avec la session en cours
+        disponibles = [q for q in questions if q["question"].strip().lower() not in exclusions_liste]
+        
+        if not disponibles:  # Sécurité ultime si le quiz demandé est géant
+            return random.choice(questions)
+            
     return random.choice(disponibles)
 
-async def obtenir_question_groq() -> dict:
+async def obtenir_question_groq(exclusions_liste: list) -> dict:
     if not groq_client:
         return None
-    historique = charger_json(FICHIER_HISTORIQUE)[-30:]
-    exclusions = "\n".join([f"- {q}" for q in historique])
+        
+    # On transmet uniquement les 30 derniers éléments à Groq pour ne pas saturer le contexte
+    historique_recents = exclusions_liste[-30:]
+    exclusions_prompt = "\n".join([f"- {q}" for q in historique_recents])
 
     system_prompt = (
         "Tu es un concepteur expert du concours d'entrée INFAS (CI).\n"
@@ -208,23 +224,32 @@ async def obtenir_question_groq() -> dict:
         "  \"options\": [\"Option 0\", \"Option 1\", \"Option 2\", \"Option 3\"],\n"
         "  \"reponse_correcte\": 0\n"
         "}\n"
-        f"INTERDICTION de générer ces questions existantes :\n{exclusions}"
+        f"INTERDICTION absolue de générer ces questions existantes (ou très similaires) :\n{exclusions_prompt}"
     )
 
-    try:
-        completion = groq_client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "Génère un QCM médical INFAS."}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.8
-        )
-        return json.loads(completion.choices[0].message.content.strip())
-    except Exception as e:
-        logger.error(f"Échec Groq : {e}")
-        return None
+    # Boucle de sécurité (jusqu'à 3 tentatives) pour éliminer les doublons de l'IA
+    for _ in range(3):
+        try:
+            completion = groq_client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": "Génère un QCM médical INFAS."}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.8
+            )
+            data = json.loads(completion.choices[0].message.content.strip())
+            if data and "question" in data:
+                q_text = data["question"].strip().lower()
+                if q_text not in exclusions_liste:
+                    return data
+                else:
+                    logger.info(f"Doublon textuel détecté de Groq : '{q_text}'. Nouvelle tentative...")
+        except Exception as e:
+            logger.error(f"Échec Groq ou parsing JSON : {e}")
+            
+    return None
 
 def calculer_temps(question_data: dict) -> int:
     texte = question_data["question"] + " ".join(question_data["options"])
@@ -297,18 +322,27 @@ async def orchestrer_quiz(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
     source = random.choice(["groq", "local"])
     quiz_data = None
 
+    # Chargement de l'historique global et combinaison avec la session active
+    historique_global = charger_json(FICHIER_HISTORIQUE)
+    toutes_exclusions = list(set(historique_global) | session["questions_posees"])
+
     if source == "groq" and groq_client:
         msg = await context.bot.send_message(chat_id=chat_id, text=f"🔄 _Génération de la question {session['current_index']}/{total} par Groq..._")
-        quiz_data = await obtenir_question_groq()
+        quiz_data = await obtenir_question_groq(toutes_exclusions)
         try:
             await context.bot.delete_message(chat_id=chat_id, message_id=msg.message_id)
         except Exception:
             pass
 
+    # Si Groq a échoué, s'est désactivé, ou a sorti un doublon persistant -> Fallback local sécurisé
     if not quiz_data:
-        quiz_data = obtenir_question_locale()
+        quiz_data = obtenir_question_locale(toutes_exclusions)
 
+    # Enregistrement textuel de la question pour les prochains filtres
+    q_text_clean = quiz_data["question"].strip().lower()
+    session["questions_posees"].add(q_text_clean)
     sauvegarder_historique(quiz_data["question"])
+
     temps_reflexion = calculer_temps(quiz_data)
     correct_id = int(quiz_data["reponse_correcte"])
 
@@ -368,8 +402,9 @@ async def cmd_infas(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "status": "running",
         "current_index": 0,
         "total_questions": taille_session,
-        "scores": {},       # Contiendra les scores : {user_id: {"name": ..., "points": ...}}
-        "poll_ids": []      # Liste pour nettoyer POLL_TO_CHAT après le quiz
+        "scores": {},       
+        "poll_ids": [],      
+        "questions_posees": set()  # Permet le suivi d'exclusion absolu de cette session
     }
 
     await update.message.reply_text(f"🚀 *Début de l'épreuve !* Ce round contient `{taille_session}` questions. Que le meilleur gagne !")
@@ -416,7 +451,7 @@ def main():
     # Handler crucial pour écouter et compter les bonnes réponses en direct
     application.add_handler(PollAnswerHandler(handle_poll_answer))
 
-    logger.info("Bot Démarré avec système de classement actif.")
+    logger.info("Bot Démarré avec système anti-répétition actif.")
     application.run_polling()
 
 if __name__ == "__main__":
