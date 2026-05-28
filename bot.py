@@ -1,609 +1,337 @@
 import os
 import json
 import logging
-import asyncio
 import random
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+import asyncio
+from collections import defaultdict
+from telegram import Update, InputFile
+from telegram.ext import (
+    Application, CommandHandler, ContextTypes, PollHandler
+)
 
-# Configuration des logs pour Railway
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# 1. RECUPERATION DES VARIABLES DE VOTRE RAILWAY
-TELEGRAM_TOKEN = os.getenv("TOKEN") or os.getenv("TELEGRAM_TOKEN")
+TOKEN = os.getenv("TOKEN")
 
-# 2. QUESTIONS THEME 1 : COMMUNICATION NERVEUSE - 64 QUESTIONS
-QUESTIONS = [
-    {
-        "question": "La dépolarisation s’explique par :",
-        "options": [
-            "l’entrée des ions Na+ dans le milieu intracellulaire",
-            "l’entrée des ions K+ dans le milieu intracellulaire",
-            "la sortie de Na+ vers le milieu extracellulaire",
-            "la sortie de K+ vers le milieu extracellulaire"
-        ],
-        "reponse_correcte": 0
-    },
-    {
-        "question": "Dans une synapse :",
-        "options": [
-            "la circulation du message nerveux est unidirectionnelle",
-            "le neuromédiateur diffuse à partir d’une dendrite",
-            "la fixation du neuromédiateur ouvre des canaux voltage-dépendants",
-            "la transmission est bidirectionnelle"
-        ],
-        "reponse_correcte": 0
-    },
-    {
-        "question": "Un neuromédiateur donné agit sur tous les neurones :",
-        "options": ["Vrai", "Faux", "Parfois", "Cela dépend du pH"],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Le potentiel transmembranaire de repos n’existe que dans les cellules excitables.",
-        "options": ["Vrai", "Faux", "Seulement chez l’homme", "Je ne sais pas"],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Un axone peut être :",
-        "options": [
-            "toujours afférent",
-            "toujours efférent",
-            "afférent ou efférent selon le neurone",
-            "myélinisé ou non"
-        ],
-        "reponse_correcte": 2
-    },
-    {
-        "question": "Le potentiel de membrane peut être modifié par des signaux reçus au niveau :",
-        "options": [
-            "du corps cellulaire et des dendrites",
-            "de l’axone uniquement",
-            "de la gaine de myéline",
-            "du nœud de Ranvier uniquement"
-        ],
-        "reponse_correcte": 0
-    },
-    {
-        "question": "La libération du neurotransmetteur dans la fente synaptique se fait par :",
-        "options": ["Diffusion passive", "Transport actif", "Exocytose", "Endocytose"],
-        "reponse_correcte": 2
-    },
-    {
-        "question": "La différence de potentiel au repos est appelée :",
-        "options": ["Potentiel d’action", "Potentiel de repos", "PPSE", "PPSI"],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "La pompe Na+/K+ ATPase :",
-        "options": [
-            "sort 3 Na+ et entre 2 K+ en consommant de l’ATP",
-            "entre 3 Na+ et sort 2 K+",
-            "ne consomme pas d’ATP",
-            "transporte le Ca2+"
-        ],
-        "reponse_correcte": 0
-    },
-    {
-        "question": "Une synapse excitatrice provoque :",
-        "options": ["Une hyperpolarisation", "Une dépolarisation", "Aucun changement", "Un blocage"],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Une synapse inhibitrice provoque :",
-        "options": ["Une dépolarisation", "Une hyperpolarisation", "Un potentiel d’action", "Rien"],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Le potentiel d’action se propage le long de l’axone grâce à :",
-        "options": [
-            "l’ouverture séquentielle des canaux Na+ voltage-dépendants",
-            "la diffusion des K+ uniquement",
-            "la pompe Na+/K+",
-            "la gaine de myéline seule"
-        ],
-        "reponse_correcte": 0
-    },
-    {
-        "question": "La période réfractaire absolue correspond à :",
-        "options": [
-            "l’impossibilité de générer un nouveau potentiel d’action",
-            "une facilité accrue à générer un PA",
-            "l’hyperpolarisation seule",
-            "la repolarisation seule"
-        ],
-        "reponse_correcte": 0
-    },
-    {
-        "question": "La myéline permet :",
-        "options": [
-            "de ralentir la conduction",
-            "d’accélérer la conduction saltatoire",
-            "de bloquer le signal",
-            "de synthétiser l’ATP"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Les nœuds de Ranvier sont :",
-        "options": [
-            "des zones dépourvues de myéline sur l’axone",
-            "des zones myélinisées",
-            "des synapses chimiques",
-            "des dendrites"
-        ],
-        "reponse_correcte": 0
-    },
-    {
-        "question": "L’acétylcholine est un neurotransmetteur :",
-        "options": ["Inhibiteur uniquement", "Excitateur uniquement", "Peut être excitateur ou inhibiteur", "Ne transmet rien"],
-        "reponse_correcte": 2
-    },
-    {
-        "question": "Le GABA est principalement :",
-        "options": ["Excitateur", "Inhibiteur", "Neutre", "Hormonal"],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Le glutamate est principalement :",
-        "options": ["Inhibiteur", "Excitateur", "Sans effet", "Hormonal"],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "La repolarisation est due principalement à :",
-        "options": [
-            "l’entrée de Na+",
-            "la sortie de K+",
-            "l’entrée de Cl-",
-            "l’arrêt de la pompe Na+/K+"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "L’hyperpolarisation rend le neurone :",
-        "options": ["plus excitable", "moins excitable", "inchangé", "détruit"],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Le potentiel de seuil est le potentiel à partir duquel :",
-        "options": [
-            "la cellule meurt",
-            "un potentiel d’action est déclenché",
-            "la pompe s’arrête",
-            "le K+ entre"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "La loi du tout ou rien s’applique au :",
-        "options": ["Potentiel de repos", "Potentiel d’action", "PPSE", "PPSI"],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Les canaux voltage-dépendants s’ouvrent en réponse à :",
-        "options": [
-            "un changement de potentiel de membrane",
-            "un ligand chimique",
-            "une pression mécanique",
-            "la température seule"
-        ],
-        "reponse_correcte": 0
-    },
-    {
-        "question": "Les canaux ligand-dépendants s’ouvrent en réponse à :",
-        "options": [
-            "une dépolarisation",
-            "la fixation d’un neurotransmetteur",
-            "l’ATP",
-            "le Ca2+ extracellulaire"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Le calcium joue un rôle clé dans :",
-        "options": [
-            "la synthèse d’ATP",
-            "la libération des neurotransmetteurs",
-            "la repolarisation",
-            "la myélinisation"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "La vitesse de conduction est la plus rapide dans :",
-        "options": [
-            "les fibres amyéliniques fines",
-            "les fibres myélinisées épaisses",
-            "les dendrites",
-            "les synapses chimiques"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "La sommation temporelle correspond à :",
-        "options": [
-            "l’addition de potentiels provenant de synapses différentes",
-            "l’addition de potentiels provenant d’une même synapse à intervalles courts",
-            "l’inhibition totale",
-            "l’absence de signal"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "La sommation spatiale correspond à :",
-        "options": [
-            "l’addition de potentiels provenant de synapses différentes simultanément",
-            "l’addition d’un même signal répété",
-            "la suppression du signal",
-            "la fuite ionique"
-        ],
-        "reponse_correcte": 0
-    },
-    {
-        "question": "Le potentiel post-synaptique excitateur est :",
-        "options": [
-            "une dépolarisation locale",
-            "une hyperpolarisation locale",
-            "un potentiel d’action",
-            "une inhibition"
-        ],
-        "reponse_correcte": 0
-    },
-    {
-        "question": "Le potentiel post-synaptique inhibiteur est :",
-        "options": [
-            "une dépolarisation locale",
-            "une hyperpolarisation locale",
-            "un potentiel d’action",
-            "une excitation"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Le potentiel de repos est d’environ :",
-        "options": ["+40 mV", "0 mV", "-70 mV", "-100 mV"],
-        "reponse_correcte": 2
-    },
-    {
-        "question": "Le potentiel d’action atteint environ :",
-        "options": ["+30 à +40 mV", "-70 mV", "-90 mV", "0 mV"],
-        "reponse_correcte": 0
-    },
-    {
-        "question": "L’axone conduit l’influx nerveux :",
-        "options": [
-            "de la dendrite vers le corps cellulaire",
-            "du corps cellulaire vers la terminaison axonale",
-            "dans les deux sens",
-            "ne conduit pas"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Les dendrites reçoivent principalement :",
-        "options": ["les signaux sortants", "les signaux entrants", "aucun signal", "l’ATP"],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Le corps cellulaire intègre :",
-        "options": [
-            "uniquement les signaux excitateurs",
-            "les signaux excitateurs et inhibiteurs",
-            "aucun signal",
-            "seulement les hormones"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Une lésion de la gaine de myéline entraîne :",
-        "options": [
-            "une accélération de la conduction",
-            "un ralentissement ou un blocage de la conduction",
-            "aucun effet",
-            "une augmentation de l’ATP"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "La sclérose en plaques affecte principalement :",
-        "options": ["Les dendrites", "La gaine de myéline", "Les mitochondries", "Le noyau"],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Les canaux sodiques voltage-dépendants s’inactivent rapidement après :",
-        "options": ["Ouverture", "Fermeture", "Repolarisation", "Hyperpolarisation"],
-        "reponse_correcte": 0
-    },
-    {
-        "question": "Les canaux potassiques voltage-dépendants s’ouvrent plus lentement que les canaux Na+ :",
-        "options": ["Vrai", "Faux", "Ils ne s’ouvrent jamais", "Uniquement au repos"],
-        "reponse_correcte": 0
-    },
-    {
-        "question": "La recapture des neurotransmetteurs sert à :",
-        "options": [
-            "augmenter la concentration dans la fente",
-            "arrêter le signal",
-            "créer un PA",
-            "synthétiser la myéline"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "La dégradation enzymatique du neurotransmetteur a lieu dans :",
-        "options": [
-            "le cytosol présynaptique",
-            "la fente synaptique",
-            "le noyau",
-            "la mitochondrie"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "L’acétylcholinestérase dégrade :",
-        "options": ["Le GABA", "Le glutamate", "L’acétylcholine", "La dopamine"],
-        "reponse_correcte": 2
-    },
-    {
-        "question": "Une synapse électrique transmet le signal via :",
-        "options": [
-            "des neurotransmetteurs",
-            "des jonctions communicantes",
-            "des hormones",
-            "des enzymes"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Les synapses chimiques sont majoritaires dans le SNC humain :",
-        "options": ["Vrai", "Faux", "Jamais", "Uniquement en pathologie"],
-        "reponse_correcte": 0
-    },
-    {
-        "question": "La neuroglie ne participe pas à :",
-        "options": [
-            "la myélinisation",
-            "la nutrition des neurones",
-            "la génération directe du potentiel d’action",
-            "la régulation ionique"
-        ],
-        "reponse_correcte": 2
-    },
-    {
-        "question": "Les oligodendrocytes myélinisent :",
-        "options": [
-            "les axones du SNP",
-            "les axones du SNC",
-            "les dendrites",
-            "les synapses"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Les cellules de Schwann myélinisent :",
-        "options": [
-            "les axones du SNC",
-            "les axones du SNP",
-            "les dendrites",
-            "le corps cellulaire"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Un potentiel gradué est :",
-        "options": [
-            "tout ou rien",
-            "proportionnel à l’intensité du stimulus",
-            "irréversible",
-            "uniquement inhibiteur"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Le potentiel d’action est :",
-        "options": ["gradué", "tout ou rien", "local", "uniquement inhibiteur"],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "La polarité membranaire au repos est maintenue par :",
-        "options": [
-            "la perméabilité sélective et la pompe Na+/K+",
-            "uniquement la diffusion du Na+",
-            "uniquement la diffusion du K+",
-            "la gaine de myéline"
-        ],
-        "reponse_correcte": 0
-    },
-    {
-        "question": "La concentration intracellulaire en K+ est :",
-        "options": [
-            "inférieure à l’extracellulaire",
-            "supérieure à l’extracellulaire",
-            "égale",
-            "nulle"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "La concentration intracellulaire en Na+ est :",
-        "options": [
-            "supérieure à l’extracellulaire",
-            "inférieure à l’extracellulaire",
-            "égale",
-            "nulle"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "La conduction saltatoire se fait :",
-        "options": [
-            "de nœud de Ranvier en nœud de Ranvier",
-            "de façon continue",
-            "uniquement dans les dendrites",
-            "dans le corps cellulaire"
-        ],
-        "reponse_correcte": 0
-    },
-    {
-        "question": "Un neurone moteur est :",
-        "options": ["Afférent", "Efférent", "Interneurone", "Sensoriel"],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Un neurone sensitif est :",
-        "options": ["Afférent", "Efférent", "Moteur", "Associatif"],
-        "reponse_correcte": 0
-    },
-    {
-        "question": "Un interneurone est principalement :",
-        "options": [
-            "sensoriel",
-            "moteur",
-            "associatif, entre neurones",
-            "myélinique"
-        ],
-        "reponse_correcte": 2
-    },
-    {
-        "question": "La plasticité synaptique est la capacité de la synapse à :",
-        "options": [
-            "rester fixe",
-            "modifier son efficacité",
-            "détruire le neurone",
-            "bloquer l’ATP"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "La potentialisation à long terme est un mécanisme de :",
-        "options": [
-            "inhibition",
-            "mémoire et apprentissage",
-            "dégénérescence",
-            "myélinisation"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "La dépression à long terme entraîne :",
-        "options": [
-            "un renforcement synaptique",
-            "un affaiblissement synaptique",
-            "un PA spontané",
-            "une myélinisation"
-        ],
-        "reponse_correcte": 1
-    },
-    {
-        "question": "Le rôle principal de la fente synaptique est :",
-        "options": [
-            "accélérer le signal",
-            "permettre la diffusion du neurotransmetteur",
-            "bloquer le signal",
-            "synthétiser l’ATP"
-        ],
-        "reponse_correcte": 1
-    }
-]
+# ============ TEMPS PAR THÈME ============
+POLL_TIMES = {
+    "default": 30,
+    "francais_commentaire_tourisme": 90,
+    "francais_dissertation_sujet1": 120,
+    "francais_dissertation_sujet2": 120,
+    "francais_types_texte": 90
+}
 
-# Stockage simple en mémoire pour le score par utilisateur
-user_scores = {}
+SESSION_SIZES = [15, 20, 25, 30, 33]
+
+# ============ BASE DE QUESTIONS INFAS 2018 ============
+QUESTIONS = {
+    # Français
+    "francais_dissertation_sujet1": [
+        {
+            "question": "SUJET 1\n« La satisfaction de l'exercice d'un métier réside dans la récompense personnelle que dans la plénitude offerte avec bénéfices »\n\nLis le sujet avant de répondre aux questions suivantes.",
+            "options": ["J'ai lu le sujet"],
+            "reponse_correcte": 0,
+            "explication": "Passe aux questions maintenant."
+        },
+        {"question": "Le thème de ce sujet est :", "options": ["La récompense personnelle", "La satisfaction de l'exercice d'un métier", "L'exercice d'un métier", "Le métier"], "reponse_correcte": 1},
+        {"question": "Ce sujet répond à un plan :", "options": ["Analytique", "Comparatif", "Dialectique", "Thématique"], "reponse_correcte": 2},
+        {"question": "La problématique de ce sujet est l'objectif de l'exercice d'un métier.", "options": ["Vrai", "Faux"], "reponse_correcte": 0},
+        {"question": "Commenter une assertion signifie réfuter une opinion", "options": ["Vrai", "Faux"], "reponse_correcte": 1},
+        {"question": "Le métier est un outil de socialisation de l'homme", "options": ["Vrai", "Faux"], "reponse_correcte": 0},
+        {"question": "L'exercice d'un métier permet à l'individu d'obtenir ses moyens d'existence.", "options": ["Vrai", "Faux"], "reponse_correcte": 0}
+    ],
+    "francais_dissertation_sujet2": [
+        {
+            "question": "SUJET 2\n« Le sous-développement (de l'Afrique) résulte de la domination coloniale et néocoloniale, qui interdit tout progrès autonome et continue des forces productrices »\n\nLis le sujet avant de répondre aux questions suivantes.",
+            "options": ["J'ai lu le sujet"],
+            "reponse_correcte": 0
+        },
+        {"question": "Le néo-colonialisme est la nouvelle forme de colonialisme après les indépendances.", "options": ["Vrai", "Faux"], "reponse_correcte": 0},
+        {"question": "« Le progrès autonome » signifie « une avancée automatique »", "options": ["Vrai", "Faux"], "reponse_correcte": 1},
+        {"question": "Le thème du sujet est le sous-développement de l'Afrique.", "options": ["Vrai", "Faux"], "reponse_correcte": 0},
+        {"question": "Le sujet pose le problème des causes endogènes du sous-développement de l'Afrique.", "options": ["Vrai", "Faux"], "reponse_correcte": 1}
+    ],
+    "francais_commentaire_tourisme": [
+        {
+            "question": "TOURISME MONDIAL\nL’élan du tourisme mondial est né dans les années 60. Le tiers monde pauvre a pensé qu’il avait une occasion à saisir : vendre ses paysages, ses climats ensoleillés, ses plages de sable fin, ses cultures exotiques. Il voulait recueillir des devises pour stimuler sa machine économique.\n\nPar ailleurs, on a jamais autant voyagé : gros avions à réactions, vacances programmées, étirées, agences de voyages à tous les coins de rues, jamais le monde, même lointain, n’a été aussi accessible. Au début des années 70, « le slogan le tourisme facteur de paix et d’échanges… moyen de compréhension entre les peuples » était repris en chœur par tous de l’UNESCO à la conférence des Nations Unies pour le commerce et le développement, en passant par la Banque Mondiale.\n\nMalheureusement, la rencontre fut manquée, 80% des touristes dans le monde sont originaires des pays industrialisés. C’est un « échange » à sens unique, et le tourisme, bien malgré lui, est loin d’être un personnage innocent. En effet, le voyage ne peut être isolé d’un certain contexte et de son environnement humain et social. Nous ne sommes plus au temps des explorateurs, missionnaires, pèlerins et autres poètes. Le voyage est devenu un produit, une affaire de marchands. Chaque année, plus de soixante millions d’Occidentaux prennent des vacances dans un pays en voie de développement. Visiter le tiers monde, certes, mais quel tiers monde?\n\nRien dans les dépliants et les catalogues des organisateurs et promoteurs de ce tourisme multinational ne permet de soupçonner l’effroyable misère sévissant dans ces terres paradisiaques, ni la pauvreté absolue des hommes tenus à l’écart des grands circuits touristiques. Tout au long des plages, c’est l’exotisme caricatural et racoleur qui s’étale : couples bronzés allongés sur des plages désertes, blondes voluptueuse vous invitant à l’aventure au bord de la piscine d’un hôtel quatre étoiles, formules clichées pour vendre des terres de rêve, figeant des populations typiques, folkloriques et serviles.\n\nE. Mestiri, Le Monde, 20 Septembre 1985",
+            "options": ["J'ai lu le texte"],
+            "reponse_correcte": 0,
+            "explication": "Lis bien le texte. Les questions arrivent juste après."
+        },
+        {"question": "Ce texte est un texte :", "options": ["Explicatif", "Argumentatif", "Descriptif", "Narratif"], "reponse_correcte": 1},
+        {"question": "Pour l'auteur, le tourisme s'avère être :", "options": ["Une évasion plébiscitée par l'UNESCO", "Un rendez-vous manqué", "Une rencontre exaltante entre les peuples", "Une épreuve pour les pays démunis"], "reponse_correcte": 1},
+        {"question": "Le tourisme profite aux pays du tiers monde.", "options": ["Vrai", "Faux"], "reponse_correcte": 0},
+        {"question": "Les pays occidentaux sont plus visités.", "options": ["Vrai", "Faux"], "reponse_correcte": 0},
+        {"question": "Les dépliants et les catalogues sont des leurres.", "options": ["Vrai", "Faux"], "reponse_correcte": 0},
+        {"question": "Les touristes occidentaux sont en harmonie avec la population locale.", "options": ["Vrai", "Faux"], "reponse_correcte": 1},
+        {"question": "Les pays occidentaux sont :", "options": ["Industrialisés", "Émergents", "Sous-développés", "Relativement développés"], "reponse_correcte": 0},
+        {"question": "« Par ailleurs » est un connecteur logique :", "options": ["Addition", "Opposition", "Explication", "Concession"], "reponse_correcte": 0}
+    ],
+    "francais_types_texte": [
+        {
+            "question": "TYPES DE TEXTE\n« Les Sossos furent surpris de cette attaque soudaine. Tous croyaient que la bataille était pour le lendemain. L'éclair traverse le moins rapidement, la foudre terrorise moins, la crue surprend moins que Djatanefondit sur Sosso Balla et ses forgerons ».\n\nLis l'extrait avant de répondre.",
+            "options": ["J'ai lu l'extrait"],
+            "reponse_correcte": 0
+        },
+        {"question": "Cet extrait est :", "options": ["Un récit", "Un poème", "Une scène de dialogue"], "reponse_correcte": 0, "explication": "C'est un récit : on raconte une action, il y a des verbes d'action, des personnages."}
+    ],
+    "francais_litterature_genre": [
+        {"question": "Le roman est :", "options": ["Un récit en prose", "Un texte versifié", "Un monologue", "Une prose poétique"], "reponse_correcte": 0},
+        {"question": "« Une si longue lettre » est une œuvre écrite par Fatou Keita", "options": ["Vrai", "Faux"], "reponse_correcte": 1},
+        {"question": "« Le devoir de violence » est un romanesque écrit par Yambo Ouologuem", "options": ["Vrai", "Faux"], "reponse_correcte": 0},
+        {"question": "« Britannicus » est une œuvre théâtrale", "options": ["Vrai", "Faux"], "reponse_correcte": 0},
+        {"question": "« Antigone » est une œuvre romanesque", "options": ["Vrai", "Faux"], "reponse_correcte": 1},
+        {"question": "« Allah n'est pas obligé » est une œuvre d'Ahmadou Kourouma", "options": ["Vrai", "Faux"], "reponse_correcte": 0}
+    ],
+    "francais_litterature_courants": [
+        {"question": "Le classicisme appartient au 18ᵉ siècle", "options": ["Vrai", "Faux"], "reponse_correcte": 1},
+        {"question": "Aimé Césaire est un écrivain :", "options": ["Classique", "Romantique", "Parnassien", "Négritude"], "reponse_correcte": 3},
+        {"question": "Le champ lexical est l'ensemble des mots utilisés pour désigner et qualifier une notion.", "options": ["Vrai", "Faux"], "reponse_correcte": 0},
+        {"question": "« Massacre, saccage, fracas, ravage » appartient au champ lexical de la :", "options": ["Vengeance", "Réparation", "Destruction", "Construction"], "reponse_correcte": 2},
+        {"question": "La litote est une figure de style qui consiste à atténuer l'expression...", "options": ["Vrai", "Faux"], "reponse_correcte": 0}
+    ],
+
+    # Biologie
+    "biologie_communication_nerveuse": [
+        {"question": "La dépolarisation s'explique par :", "options": ["Entrée des ions Na⁺ dans le milieu intracellulaire", "Entrée des ions K⁺ dans le milieu intracellulaire", "Sortie de Na⁺ vers le milieu extracellulaire", "Sortie de K⁺ vers le milieu extracellulaire"], "reponse_correcte": 0},
+        {"question": "Dans une synapse :", "options": ["La circulation du message nerveux est unidirectionnelle"], "reponse_correcte": 0},
+        {"question": "À propos de la fibre nerveuse :", "options": ["L'intérieur est chargé positivement", "L'intérieur est chargé négativement", "L'intérieur est neutre"], "reponse_correcte": 1},
+        {"question": "La valeur du potentiel de membrane :", "options": ["+70 mV", "-30 mV", "-70 mV", "+30 mV"], "reponse_correcte": 2},
+        {"question": "Quand le PA arrive au niveau du bouton synaptique :", "options": ["Sortie de Ca²⁺ de la cellule", "Entrée de Ca²⁺ dans la cellule"], "reponse_correcte": 1}
+    ],
+    "biologie_nutrition": [
+        {"question": "La digestion est le passage des aliments dans le sang", "options": ["Vrai", "Faux"], "reponse_correcte": 1},
+        {"question": "Les nutriments sont les substances obtenues après la digestion des aliments", "options": ["Vrai", "Faux"], "reponse_correcte": 0},
+        {"question": "La digestion des protides donne des acides aminés", "options": ["Vrai", "Faux"], "reponse_correcte": 0},
+        {"question": "La digestion des glucides donne l'acide gras.", "options": ["Vrai", "Faux"], "reponse_correcte": 1}
+    ],
+    "biologie_immunologie": [
+        {"question": "Les lymphocytes naissent dans la moelle osseuse ou le thymus :", "options": ["Vrai", "Faux"], "reponse_correcte": 0},
+        {"question": "Le SIDA déséquilibre le système immunitaire en s'attaquant :", "options": ["Aux lymphocytes T4", "Aux lymphocytes B"], "reponse_correcte": 0}
+    ],
+    "biologie_reproduction": [
+        {"question": "Les règles sont déclenchées par :", "options": ["Arrêt de production des œstrogènes et de la progestérone"], "reponse_correcte": 0},
+        {"question": "Le préservatif masculin empêche la rencontre des gamètes", "options": ["Vrai", "Faux"], "reponse_correcte": 0},
+        {"question": "L'ovulation est provoquée par :", "options": ["Pic de sécrétion de LH et FSH"], "reponse_correcte": 0}
+    ],
+
+    # Culture Générale
+    "culture_seance_1": [
+        {"question": "La période de la décolonisation de la Côte d'Ivoire part :", "options": ["Du lendemain de la deuxième guerre mondiale jusqu'au 07 Août 1960"], "reponse_correcte": 0},
+        {"question": "La Côte d'Ivoire compte 509 Sous-préfecture et 108 départements", "options": ["Vrai", "Faux"], "reponse_correcte": 1},
+        {"question": "Le dernier pays indépendant en Afrique est :", "options": ["La Namibie", "Le Soudan", "Le Sud-Soudan"], "reponse_correcte": 2},
+        {"question": "Le directeur général de l'UNESCO est Audrey Azoulay", "options": ["Vrai", "Faux"], "reponse_correcte": 0}
+    ],
+    "culture_seance_2": [
+        {"question": "Les différentes étapes de la lutte émancipatrice sont :", "options": ["La phase de l'espoir", "La phase de la coordination", "La phase de la lutte"], "reponse_correcte": 2},
+        {"question": "Les cinq Bébés Tigres sont :", "options": ["La Malaisie, l'Indonésie, la Thaïlande, les Philippines et le Brunei"], "reponse_correcte": 0}
+    ],
+    "culture_seance_3": [
+        {"question": "En Côte d'Ivoire, le nombre de départements est de 108 :", "options": ["Vrai", "Faux"], "reponse_correcte": 1}
+    ],
+    "culture_seance_4": [
+        {"question": "Les pays émergents appelés BRIC sont :", "options": ["Du Brésil, de la Russie, l'Inde et la Chine"], "reponse_correcte": 0},
+        {"question": "Le pays le plus vaste au monde est :", "options": ["La Russie"], "reponse_correcte": 0}
+    ]
+}
+
+# Stockage en mémoire
+sessions = {}
+user_scores = defaultdict(lambda: defaultdict(int))
+used_questions = defaultdict(lambda: defaultdict(list))
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Message d'accueil"""
-    user_id = update.effective_user.id
-    if user_id not in user_scores:
-        user_scores[user_id] = {"score": 0, "total": 0}
-    
-    welcome_text = (
-        "🎯 *Bienvenue sur INFAS QUIZ - Thème 1*\n\n"
-        "Révision : *Communication nerveuse*\n"
-        f"Banque de {len(QUESTIONS)} questions niveau INFAS.\n\n"
-        "👉 Tapez /quiz pour une question aléatoire\n"
-        "👉 Tapez /score pour voir ton score\n"
-        "👉 Tapez /reset pour réinitialiser"
+    themes = "\n".join([f"- `{t}` : {len(QUESTIONS[t])} questions" for t in QUESTIONS.keys()])
+    text = (
+        "🎯 *INFAS QUIZ Groupe*\n\n"
+        "Lance une session : `/startquiz [theme] [nombre]`\n\n"
+        "*Thèmes disponibles :*\n" + themes + "\n\n"
+        "*Tailles :* 15, 20, 25, 30, 33\n"
+        "*Ex:* `/startquiz biologie_nutrition 20`\n\n"
+        "*Commandes :*\n"
+        "/classement - Classement du groupe\n"
+        "/resetclassement - Reset classement\n"
+        "/stopquiz - Arrêter session\n"
+        "/listthemes - Voir tous les thèmes"
     )
-    await update.message.reply_text(welcome_text, parse_mode="Markdown")
+    await update.message.reply_text(text, parse_mode="Markdown")
 
-async def quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Génère une question aléatoire du thème 1"""
-    user_id = update.effective_user.id
-    
-    if user_id not in user_scores:
-        user_scores[user_id] = {"score": 0, "total": 0}
-    
-    quiz_data = random.choice(QUESTIONS)
-    
-    question = quiz_data["question"]
-    options = quiz_data["options"]
-    reponse_correcte = quiz_data["reponse_correcte"]
-    
-    user_scores[user_id]["total"] += 1
-    
-    # Envoi du quiz natif Telegram
-    await update.message.reply_poll(
-        question=question[:300],
-        options=[opt[:100] for opt in options],
-        correct_option_id=reponse_correcte,
-        type="quiz",
-        is_anonymous=False,
-        explanation="Bonne réponse : " + options[reponse_correcte]
-    )
+async def listthemes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = "📚 *Thèmes disponibles :*\n\n"
+    for theme, qs in QUESTIONS.items():
+        text += f"- `{theme}` : {len(qs)} questions\n"
+    await update.message.reply_text(text, parse_mode="Markdown")
 
-async def score_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Affiche le score de l'utilisateur"""
-    user_id = update.effective_user.id
-    data = user_scores.get(user_id, {"score": 0, "total": 0})
-    
-    if data["total"] == 0:
-        await update.message.reply_text("Tu n'as pas encore répondu à une question. Tape /quiz pour commencer !")
+async def startquiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    if chat_id in sessions and sessions[chat_id]["active"]:
+        await update.message.reply_text("⚠️ Une session est déjà en cours. Fais /stopquiz pour l'arrêter.")
         return
-    
-    pourcentage = int((data["score"] / data["total"]) * 100) if data["total"] > 0 else 0
+
+    if len(context.args) < 2:
+        await update.message.reply_text("Usage : `/startquiz theme nombre`\nEx: `/startquiz biologie_nutrition 20`", parse_mode="Markdown")
+        return
+
+    theme = context.args[0]
+    try:
+        size = int(context.args[1])
+    except ValueError:
+        await update.message.reply_text("Le nombre doit être un entier.")
+        return
+
+    if theme not in QUESTIONS:
+        await update.message.reply_text(f"Theme inconnu. Fais /listthemes pour voir la liste.")
+        return
+
+    if size not in SESSION_SIZES:
+        await update.message.reply_text(f"Tailles autorisées : {SESSION_SIZES}")
+        return
+
+    pool = [i for i in range(len(QUESTIONS[theme])) if i not in used_questions[chat_id][theme]]
+    if len(pool) < size:
+        used_questions[chat_id][theme] = []
+        pool = list(range(len(QUESTIONS[theme])))
+        await update.message.reply_text(f"⚠️ Pool épuisé. Reset des questions pour {theme}.")
+
+    selected = random.sample(pool, min(size, len(pool)))
+    used_questions[chat_id][theme].extend(selected)
+
+    sessions[chat_id] = {
+        "active": True,
+        "theme": theme,
+        "questions": selected,
+        "current": 0,
+        "poll_id": None,
+        "scores_temp": defaultdict(int)
+    }
+
+    poll_time = POLL_TIMES.get(theme, POLL_TIMES["default"])
+
     await update.message.reply_text(
-        f"📊 *Ton score : {data['score']}/{data['total']}*\n"
-        f"📈 Réussite : {pourcentage}%",
+        f"🚀 *Session lancée!*\n"
+        f"Theme : `{theme}`\n"
+        f"Questions : *{len(selected)}*\n"
+        f"Temps : *{poll_time}s* par question\n"
+        f"Démarrage dans 5s...",
         parse_mode="Markdown"
     )
 
-async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Réinitialise le score"""
-    user_id = update.effective_user.id
-    user_scores[user_id] = {"score": 0, "total": 0}
-    await update.message.reply_text("🔄 Score réinitialisé ! Tape /quiz pour recommencer.")
+    await asyncio.sleep(5)
+    await send_next_question(chat_id, context)
 
-async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Met à jour le score quand l'utilisateur répond au poll"""
-    user_id = update.poll_answer.user.id
-    if user_id not in user_scores:
+async def send_next_question(chat_id, context):
+    session = sessions.get(chat_id)
+    if not session or not session["active"]:
         return
-    
-    # Si l'utilisateur a choisi la bonne réponse, incrémente le score
-    if update.poll_answer.option_ids:
-        # Note: Telegram ne donne pas directement si c'est correct via poll_answer
-        # Le score s'incrémente ici à chaque réponse. Pour un score exact, 
-        # il faudrait stocker poll_id et comparer avec correct_option_id
-        pass
+
+    if session["current"] >= len(session["questions"]):
+        await end_session(chat_id, context)
+        return
+
+    q_index = session["questions"][session["current"]]
+    q_data = QUESTIONS[session["theme"]][q_index]
+    theme = session["theme"]
+    poll_time = POLL_TIMES.get(theme, POLL_TIMES["default"])
+
+    msg = await context.bot.send_poll(
+        chat_id=chat_id,
+        question=f"Q{session['current']+1}/{len(session['questions'])}: {q_data['question']}"[:300],
+        options=[opt[:100] for opt in q_data["options"]],
+        correct_option_id=q_data["reponse_correcte"],
+        type="quiz",
+        is_anonymous=False,
+        explanation=q_data.get("explication", "")[:200],
+        open_period=poll_time
+    )
+
+    session["poll_id"] = msg.poll.id
+    session["current"] += 1
+
+    context.job_queue.run_once(
+        lambda ctx: asyncio.create_task(send_next_question(chat_id, ctx)),
+        poll_time + 3
+    )
+
+async def classement_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    scores = user_scores[chat_id]
+
+    if not scores:
+        await update.message.reply_text("Aucun score pour l'instant. Lance un quiz avec /startquiz")
+        return
+
+    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:10]
+    text = "🏆 *Classement du groupe*\n\n"
+    for i, (user_id, score) in enumerate(sorted_scores, 1):
+        try:
+            member = await context.bot.get_chat_member(chat_id, user_id)
+            name = member.user.first_name
+        except:
+            name = f"User {user_id}"
+        text += f"{i}. {name} - *{score}* pts\n"
+
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def resetclassement_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    user_scores[chat_id] = defaultdict(int)
+    await update.message.reply_text("🗑️ Classement réinitialisé.")
+
+async def stopquiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if chat_id in sessions:
+        sessions[chat_id]["active"] = False
+        await update.message.reply_text("⏹️ Session arrêtée.")
+    else:
+        await update.message.reply_text("Aucune session en cours.")
+
+async def end_session(chat_id, context):
+    session = sessions.get(chat_id)
+    if not session:
+        return
+
+    session["active"] = False
+    theme = session["theme"]
+
+    for user_id, score in session["scores_temp"].items():
+        user_scores[chat_id][user_id] += score
+
+    await context.bot.send_message(
+        chat_id,
+        f"✅ *Session terminée!*\n"
+        f"Theme : `{theme}`\n"
+        f"Questions posées : {len(session['questions'])}\n\n"
+        f"Fais `/classement` pour voir les résultats.",
+        parse_mode="Markdown"
+    )
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    logger.error(f"Exception: {context.error}")
 
 def main():
-    if not TELEGRAM_TOKEN:
-        logger.error("La variable d'environnement 'TOKEN' est absente. Ajoute-la sur Railway.")
+    if not TOKEN:
+        logger.error("TOKEN manquant dans les variables d'environnement")
         return
 
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    application = Application.builder().token(TOKEN).build()
 
-    # Déclaration des commandes
     application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("quiz", quiz_command))
-    application.add_handler(CommandHandler("score", score_command))
-    application.add_handler(CommandHandler("reset", reset_command))
+    application.add_handler(CommandHandler("listthemes", listthemes_command))
+    application.add_handler(CommandHandler("startquiz", startquiz_command))
+    application.add_handler(CommandHandler("classement", classement_command))
+    application.add_handler(CommandHandler("resetclassement", resetclassement_command))
+    application.add_handler(CommandHandler("stopquiz", stopquiz_command))
+    application.add_error_handler(error_handler)
 
-    logger.info(f"🤖 Bot INFAS QUIZ démarré avec {len(QUESTIONS)} questions !")
-    application.run_polling()
+    total_q = sum(len(v) for v in QUESTIONS.values())
+    logger.info(f"Bot démarré avec {total_q} questions")
+    application.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
