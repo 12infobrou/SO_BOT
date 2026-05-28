@@ -195,10 +195,10 @@ async def gerer_reponse(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 # --- CONFIGURATION DU REPRÉSENTANT ---
 def main():
-    TOKEN = "VOTRE_TOKEN_ICI"  # Remplacez par votre Token @BotFather
+    TOKEN = "8636766361:AAFxW6gZkKhcCZAneVel4a4nZ2voQ-MIRck"  # Remplacez par votre Token @BotFather
     
-    if TOKEN == "VOTRE_TOKEN_ICI":
-        print("⚠️ ERREUR : Remplace 'VOTRE_TOKEN_ICI' par ton jeton API.")
+    if TOKEN == "8636766361:AAFxW6gZkKhcCZAneVel4a4nZ2voQ-MIRck":
+        print("⚠️ ERREUR : Remplace '8636766361:AAFxW6gZkKhcCZAneVel4a4nZ2voQ-MIRck' par ton jeton API.")
         return
 
     app = Application.builder().token(TOKEN).build()
