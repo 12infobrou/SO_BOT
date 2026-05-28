@@ -1,13 +1,10 @@
 import os
-import json
 import logging
 import random
 import asyncio
 from collections import defaultdict
-from telegram import Update, InputFile
-from telegram.ext import (
-    Application, CommandHandler, ContextTypes, PollHandler
-)
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -90,7 +87,9 @@ QUESTIONS = {
     ],
     "francais_litterature_courants": [
         {"question": "Le classicisme appartient au 18ᵉ siècle", "options": ["Vrai", "Faux"], "reponse_correcte": 1},
-        {"question": "Aimé Césaire est un écrivain :", "options": ["Classique", "Romantique", "Parnassien", "Négritude"], "reponse_correcte": 3},
+        {"question": "Aimé Césaire est un écrivain :", "options": ["Classique", "Romantique", "Parnassien", "Négritude"], "reponse_correcte": 3}
+    ],
+    "francais_champs_lexicaux": [
         {"question": "Le champ lexical est l'ensemble des mots utilisés pour désigner et qualifier une notion.", "options": ["Vrai", "Faux"], "reponse_correcte": 0},
         {"question": "« Massacre, saccage, fracas, ravage » appartient au champ lexical de la :", "options": ["Vengeance", "Réparation", "Destruction", "Construction"], "reponse_correcte": 2},
         {"question": "La litote est une figure de style qui consiste à atténuer l'expression...", "options": ["Vrai", "Faux"], "reponse_correcte": 0}
@@ -149,7 +148,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     themes = "\n".join([f"- `{t}` : {len(QUESTIONS[t])} questions" for t in QUESTIONS.keys()])
     text = (
         "🎯 *INFAS QUIZ Groupe*\n\n"
-        "Lance une session : `/startquiz [theme] [nombre]`\n\n"
+        "Lance une session : `/startquiz [theme] [nombre]`\n"
+        "Random : `/randomquiz`\n\n"
         "*Thèmes disponibles :*\n" + themes + "\n\n"
         "*Tailles :* 15, 20, 25, 30, 33\n"
         "*Ex:* `/startquiz biologie_nutrition 20`\n\n"
@@ -219,6 +219,52 @@ async def startquiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Questions : *{len(selected)}*\n"
         f"Temps : *{poll_time}s* par question\n"
         f"Démarrage dans 5s...",
+        parse_mode="Markdown"
+    )
+
+    await asyncio.sleep(5)
+    await send_next_question(chat_id, context)
+
+async def randomquiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    if chat_id in sessions and sessions[chat_id]["active"]:
+        await update.message.reply_text("⚠️ Une session est déjà en cours. Fais /stopquiz pour l'arrêter.")
+        return
+
+    theme = random.choice(list(QUESTIONS.keys()))
+    size = random.choice(SESSION_SIZES)
+
+    if len(QUESTIONS[theme]) < size:
+        used_questions[chat_id][theme] = []
+        pool = list(range(len(QUESTIONS[theme])))
+        await update.message.reply_text(f"⚠️ Pool épuisé. Reset des questions pour {theme}.")
+    else:
+        pool = [i for i in range(len(QUESTIONS[theme])) if i not in used_questions[chat_id][theme]]
+        if len(pool) < size:
+            used_questions[chat_id][theme] = []
+            pool = list(range(len(QUESTIONS[theme])))
+
+    selected = random.sample(pool, min(size, len(pool)))
+    used_questions[chat_id][theme].extend(selected)
+
+    sessions[chat_id] = {
+        "active": True,
+        "theme": theme,
+        "questions": selected,
+        "current": 0,
+        "poll_id": None,
+        "scores_temp": defaultdict(int)
+    }
+
+    poll_time = POLL_TIMES.get(theme, POLL_TIMES["default"])
+
+    await update.message.reply_text(
+        f"🎲 *Random Quiz lancé!*\n"
+        f"Theme : `{theme}`\n"
+        f"Questions : *{len(selected)}*\n"
+        f"Temps : *{poll_time}s* par question\n"
+        f"C'est parti dans 5s...",
         parse_mode="Markdown"
     )
 
@@ -324,6 +370,7 @@ def main():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("listthemes", listthemes_command))
     application.add_handler(CommandHandler("startquiz", startquiz_command))
+    application.add_handler(CommandHandler("randomquiz", randomquiz_command))
     application.add_handler(CommandHandler("classement", classement_command))
     application.add_handler(CommandHandler("resetclassement", resetclassement_command))
     application.add_handler(CommandHandler("stopquiz", stopquiz_command))
