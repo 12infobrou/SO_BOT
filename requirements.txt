@@ -1,3 +1,2 @@
 groq
 python-telegram-bot
-python-telegram-bot[job-queue]==21.3
