@@ -207,7 +207,6 @@ async def startquiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "theme": theme,
         "questions": selected,
         "current": 0,
-        "poll_id": None,
         "scores_temp": defaultdict(int)
     }
 
@@ -235,15 +234,10 @@ async def randomquiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     theme = random.choice(list(QUESTIONS.keys()))
     size = random.choice(SESSION_SIZES)
 
-    if len(QUESTIONS[theme]) < size:
+    pool = [i for i in range(len(QUESTIONS[theme])) if i not in used_questions[chat_id][theme]]
+    if len(pool) < size:
         used_questions[chat_id][theme] = []
         pool = list(range(len(QUESTIONS[theme])))
-        await update.message.reply_text(f"⚠️ Pool épuisé. Reset des questions pour {theme}.")
-    else:
-        pool = [i for i in range(len(QUESTIONS[theme])) if i not in used_questions[chat_id][theme]]
-        if len(pool) < size:
-            used_questions[chat_id][theme] = []
-            pool = list(range(len(QUESTIONS[theme])))
 
     selected = random.sample(pool, min(size, len(pool)))
     used_questions[chat_id][theme].extend(selected)
@@ -253,7 +247,6 @@ async def randomquiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "theme": theme,
         "questions": selected,
         "current": 0,
-        "poll_id": None,
         "scores_temp": defaultdict(int)
     }
 
@@ -285,7 +278,7 @@ async def send_next_question(chat_id, context):
     theme = session["theme"]
     poll_time = POLL_TIMES.get(theme, POLL_TIMES["default"])
 
-    msg = await context.bot.send_poll(
+    await context.bot.send_poll(
         chat_id=chat_id,
         question=f"Q{session['current']+1}/{len(session['questions'])}: {q_data['question']}"[:300],
         options=[opt[:100] for opt in q_data["options"]],
@@ -296,13 +289,11 @@ async def send_next_question(chat_id, context):
         open_period=poll_time
     )
 
-    session["poll_id"] = msg.poll.id
     session["current"] += 1
 
-    context.job_queue.run_once(
-        lambda ctx: asyncio.create_task(send_next_question(chat_id, ctx)),
-        poll_time + 3
-    )
+    # Attente + envoi question suivante
+    await asyncio.sleep(poll_time + 3)
+    await send_next_question(chat_id, context)
 
 async def classement_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
